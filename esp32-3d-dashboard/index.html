@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Fan Digital Twin Dashboard</title>
+    <style>
+        /* Modern Dark Dashboard Theme */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0c10;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* Telemetry HUD Panel Overlay */
+        #dashboard-hud {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            z-index: 10;
+            background: rgba(26, 29, 36, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            min-width: 240px;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        h1 {
+            margin: 0 0 4px 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #66fcf1;
+        }
+
+        h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            font-weight: 400;
+            color: #c5c6c7;
+        }
+
+        .metric-container {
+            margin-bottom: 15px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #858585;
+        }
+
+        #counter-display {
+            font-size: 64px;
+            font-weight: 700;
+            line-height: 1;
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.2);
+            margin: 5px 0;
+        }
+
+        #status-display {
+            display: inline-block;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: rgba(255, 76, 76, 0.15);
+            color: #ff4c4c;
+            border: 1px solid rgba(255, 76, 76, 0.3);
+            margin-top: 5px;
+            transition: all 0.3s ease;
+        }
+
+        /* Dynamic Status State Classes */
+        #status-display.active {
+            background: rgba(0, 226, 114, 0.15);
+            color: #00e272;
+            border: 1px solid rgba(0, 226, 114, 0.3);
+            box-shadow: 0 0 15px rgba(0, 226, 114, 0.2);
+        }
+
+        /* Simple loading indicator overlay */
+        #loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0b0c10;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #66fcf1;
+            font-size: 18px;
+            letter-spacing: 1px;
+            transition: opacity 0.5s ease;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <div id="loader">LOADING 3D DIGITAL TWIN MODEL...</div>
+
+    <div id="dashboard-hud">
+        <h1>Digital Twin</h1>
+        <h2>ESP32-S3 Mesh Monitor</h2>
+        
+        <div class="metric-container">
+            <div class="metric-label">Current Telemetry Value</div>
+            <div id="counter-display">--</div>
+        </div>
+
+        <div class="metric-container">
+            <div class="metric-label">Actuator Status</div>
+            <div id="status-display">INITIALIZING...</div>
+        </div>
+    </div>
+
+	<script type="module">
+  	// Import the functions you need from the SDKs you need
+  	import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+  	import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-analytics.js";
+  	// TODO: Add SDKs for Firebase products that you want to use
+  	// https://firebase.google.com/docs/web/setup#available-libraries
+
+  	// Your web app's Firebase configuration
+  	// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  	const firebaseConfig = {
+    	apiKey: "AIzaSyB_STFkQP8yW_oe9guPnoJVK7BpwEwNNmE",
+    	authDomain: "esp32-fan-twin.firebaseapp.com",
+    	databaseURL: "https://esp32-fan-twin-default-rtdb.asia-southeast1.firebasedatabase.app",
+    	projectId: "esp32-fan-twin",
+    	storageBucket: "esp32-fan-twin.firebasestorage.app",
+    	messagingSenderId: "725597542634",
+    	appId: "1:725597542634:web:02cda9642586a26d4bdf93",
+    	measurementId: "G-L8LWGZFMD9"
+  	};
+
+  	// Initialize Firebase
+  	const app = initializeApp(firebaseConfig);
+  	const analytics = getAnalytics(app);
+
+
+        // ==========================================
+        // 2. THREE.JS ENGINE SETUP
+        // ==========================================
+        const scene = new THREE.Scene();
+        
+        // Setup Perspective Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 15, 35); // Elevated view to display the model cleanly
+        camera.lookAt(0, 0, 0);
+
+        // Setup WebGL Renderer with Antialiasing
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; // Enhances visual fidelity of GLB materials
+        renderer.toneMappingExposure = 1.0;
+        document.body.appendChild(renderer.domElement);
+
+        // Environmental Lighting Layout
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight1.position.set(10, 20, 15);
+        scene.add(dirLight1);
+
+        const dirLight2 = new THREE.DirectionalLight(0x44aaee, 0.4); // Subtle blue fill-light
+        dirLight2.position.set(-10, -5, -15);
+        scene.add(dirLight2);
+
+        // Engine Animation System Handles
+        let mixer; 
+        let fanAction; 
+        const clock = new THREE.Clock();
+
+        // ==========================================
+        // 3. GLTF/GLB MODEL LOADER PIPELINE
+        // ==========================================
+        const loader = new THREE.GLTFLoader();
+        
+        // Loads lightbulb.glb directly from your repository root
+        loader.load('lightbulb.glb', (gltf) => {
+            const model = gltf.scene;
+            scene.add(model);
+            
+            // Adjust framing if needed
+            model.position.set(0, 0, 0);
+
+            // Extract built-in animations from the file
+            if (gltf.animations && gltf.animations.length > 0) {
+                mixer = new THREE.AnimationMixer(model);
+                
+                // Track the first keyframe animation inside the GLB
+                fanAction = mixer.clipAction(gltf.animations[0]);
+                
+                // Remove loader overlay screen once everything is ready
+                const loaderEl = document.getElementById('loader');
+                loaderEl.style.opacity = 0;
+                setTimeout(() => loaderEl.remove(), 500);
+
+                document.getElementById('status-display').innerText = "SYSTEM CONNECTED";
+                
+                // Initialize active Firebase syncing
+                startDatabaseListener();
+            } else {
+                document.getElementById('status-display').innerText = "ERROR: NO GLB TIMELINES";
+                document.getElementById('loader').innerText = "Animation tracks missing in GLB asset.";
+            }
+        }, undefined, (error) => {
+            console.error("Asset Load Error:", error);
+            document.getElementById('status-display').innerText = "ERROR LOADING ASSET";
+            document.getElementById('loader').innerText = "Failed to load 'lightbulb.glb'. Verify file placement.";
+        });
+
+        // ==========================================
+        // 4. REALTIME FIREBASE TELEMETRY LISTENER
+        // ==========================================
+        function startDatabaseListener() {
+            const valueRef = ref(db, '/telemetry/currentValue');
+            const counterEl = document.getElementById('counter-display');
+            const statusEl = document.getElementById('status-display');
+
+            onValue(valueRef, (snapshot) => {
+                const val = snapshot.val();
+                if (val !== null && fanAction) {
+                    counterEl.innerText = val;
+
+                    // Automation Logic: Is the number a multiple of 5?
+                    if (val % 5 === 0) {
+                        fanAction.play(); // Play the file's animation track
+                        statusEl.innerText = "FAN RUNNING";
+                        statusEl.className = "active";
+                    } else {
+                        fanAction.stop(); // Halt animation and reset to frame 0
+                        statusEl.innerText = "FAN IDLE";
+                        statusEl.className = "";
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // 5. RENDERING INTERACTIVE LOOP
+        // ==========================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Compute delta clock changes to keep track of keyframe intervals smoothly
+            if (mixer) {
+                const delta = clock.getDelta();
+                mixer.update(delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Keep viewport scale responsive during window resizes
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
