@@ -154,16 +154,16 @@
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
-        const db = getDatabase(app); // SUCCESSFUL INITIALIZATION FIX
+        const db = getDatabase(app); 
 
         // ==========================================
         // 2. THREE.JS ENGINE SETUP
         // ==========================================
         const scene = new THREE.Scene();
          
-        // Setup Perspective Camera
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 15, 45); // Optimized framing distance
+        // Setup Perspective Camera with wide framing capabilities
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 20, 50); 
         camera.lookAt(0, 0, 0);
 
         // Setup WebGL Renderer with Antialiasing
@@ -171,12 +171,17 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.toneMapping = THREE.ACESFilmicToneMapping; 
-        renderer.toneMappingExposure = 1.2; // Brightened exposure
+        renderer.toneMappingExposure = 1.2; 
         document.body.appendChild(renderer.domElement);
 
         // Environmental Lighting Layout
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Higher intensity ambient fill
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
         scene.add(ambientLight);
+
+        // Adds 360-degree ambient environmental sky lighting to eliminate shadow blending
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.0); 
+        hemiLight.position.set(0, 200, 0);
+        scene.add(hemiLight);
 
         const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
         dirLight1.position.set(10, 20, 15);
@@ -198,14 +203,26 @@
         // ==========================================
         const loader = new THREE.GLTFLoader();
          
-        // Loads lightbulb.glb directly from your repository folder
         loader.load('lightbulb.glb', (gltf) => {
             targetModel = gltf.scene;
             scene.add(targetModel);
              
-            // Center the asset model structure
-            targetModel.position.set(0, 0, 0);
-            targetModel.scale.set(1, 1, 1);
+            // ====================================================
+            // AUTOMATIC VIEWPORT BOX BOUNDING SCALE FIX
+            // ====================================================
+            const box = new THREE.Box3().setFromObject(targetModel);
+            const size = box.getSize(new THREE.Vector3()).length();
+            const center = box.getCenter(new THREE.Vector3());
+            
+            // Recenter the model mesh coordinates to the canvas axis origin (0,0,0)
+            targetModel.position.x += (targetModel.position.x - center.x);
+            targetModel.position.y += (targetModel.position.y - center.y);
+            targetModel.position.z += (targetModel.position.z - center.z);
+            
+            // Mathematically fit the object boundaries into the visible frame
+            const scaleFactor = 25 / size; 
+            targetModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+            // ====================================================
 
             // Handle internal timelines if they exist
             if (gltf.animations && gltf.animations.length > 0) {
@@ -225,7 +242,7 @@
         }, undefined, (error) => {
             console.error("Asset Load Error:", error);
             document.getElementById('status-display').innerText = "ERROR LOADING ASSET";
-            document.getElementById('loader').innerText = "Failed to load 'lightbulb.glb'. Please refresh.";
+            document.getElementById('loader').innerText = "Failed to load 'lightbulb.glb'. Please verify file name.";
         });
 
         // ==========================================
@@ -246,7 +263,6 @@
                         statusEl.innerText = "FAN RUNNING";
                         statusEl.className = "active";
                         
-                        // Action: Trigger built-in track OR fall back to code-based manual rotation
                         if (fanAction) {
                             fanAction.play();
                         } else {
@@ -279,9 +295,9 @@
                 mixer.update(delta);
             }
 
-            // Fallback: Code-driven programmatic rotation if file has no keyframes
+            // Fallback: Programmatic rotation if file has no embedded keyframes
             if (isRotating && targetModel) {
-                targetModel.rotation.y += 0.05; // Rotates model smoothly on the vertical Y-axis
+                targetModel.rotation.y += 0.05; 
             }
 
             renderer.render(scene, camera);
